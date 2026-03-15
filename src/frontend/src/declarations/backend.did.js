@@ -19,13 +19,35 @@ export const _CaffeineStorageRefillResult = IDL.Record({
   'success' : IDL.Opt(IDL.Bool),
   'topped_up_amount' : IDL.Opt(IDL.Nat),
 });
-export const ExternalBlob = IDL.Vec(IDL.Nat8);
+export const UserRole = IDL.Variant({
+  'admin' : IDL.Null,
+  'user' : IDL.Null,
+  'guest' : IDL.Null,
+});
 export const Time = IDL.Int;
-export const Photo = IDL.Record({
+export const RSVP = IDL.Record({
+  'name' : IDL.Text,
+  'inviteCode' : IDL.Text,
+  'timestamp' : Time,
+  'attending' : IDL.Bool,
+});
+export const UserProfile = IDL.Record({ 'username' : IDL.Opt(IDL.Text) });
+export const InviteCode = IDL.Record({
+  'created' : Time,
+  'code' : IDL.Text,
+  'used' : IDL.Bool,
+});
+export const ExternalBlob = IDL.Vec(IDL.Nat8);
+export const MediaType = IDL.Variant({
+  'video' : IDL.Null,
+  'photo' : IDL.Null,
+});
+export const MediaItem = IDL.Record({
   'owner' : IDL.Principal,
   'blob' : ExternalBlob,
   'timestamp' : Time,
   'caption' : IDL.Opt(IDL.Text),
+  'mediaType' : MediaType,
 });
 
 export const idlService = IDL.Service({
@@ -55,11 +77,33 @@ export const idlService = IDL.Service({
       [],
     ),
   '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addFriend' : IDL.Func([IDL.Principal], [], []),
-  'getFriendPhotos' : IDL.Func([IDL.Principal], [IDL.Vec(Photo)], ['query']),
+  'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'deleteMedia' : IDL.Func([Time], [], []),
+  'generateInviteCode' : IDL.Func([], [IDL.Text], []),
+  'getAllRSVPs' : IDL.Func([], [IDL.Vec(RSVP)], ['query']),
+  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+  'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getFriends' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
-  'getMyPhotos' : IDL.Func([], [IDL.Vec(Photo)], ['query']),
-  'uploadPhoto' : IDL.Func([ExternalBlob, IDL.Opt(IDL.Text)], [], []),
+  'getInviteCodes' : IDL.Func([], [IDL.Vec(InviteCode)], ['query']),
+  'getMyMedia' : IDL.Func([], [IDL.Vec(MediaItem)], ['query']),
+  'getUserMedia' : IDL.Func([IDL.Principal], [IDL.Vec(MediaItem)], ['query']),
+  'getUserProfile' : IDL.Func(
+      [IDL.Principal],
+      [IDL.Opt(UserProfile)],
+      ['query'],
+    ),
+  'getUsername' : IDL.Func([IDL.Principal], [IDL.Opt(IDL.Text)], ['query']),
+  'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'setUsername' : IDL.Func([IDL.Text], [], []),
+  'submitRSVP' : IDL.Func([IDL.Text, IDL.Bool, IDL.Text], [], []),
+  'uploadMedia' : IDL.Func(
+      [ExternalBlob, IDL.Opt(IDL.Text), MediaType],
+      [],
+      [],
+    ),
 });
 
 export const idlInitArgs = [];
@@ -76,13 +120,32 @@ export const idlFactory = ({ IDL }) => {
     'success' : IDL.Opt(IDL.Bool),
     'topped_up_amount' : IDL.Opt(IDL.Nat),
   });
-  const ExternalBlob = IDL.Vec(IDL.Nat8);
+  const UserRole = IDL.Variant({
+    'admin' : IDL.Null,
+    'user' : IDL.Null,
+    'guest' : IDL.Null,
+  });
   const Time = IDL.Int;
-  const Photo = IDL.Record({
+  const RSVP = IDL.Record({
+    'name' : IDL.Text,
+    'inviteCode' : IDL.Text,
+    'timestamp' : Time,
+    'attending' : IDL.Bool,
+  });
+  const UserProfile = IDL.Record({ 'username' : IDL.Opt(IDL.Text) });
+  const InviteCode = IDL.Record({
+    'created' : Time,
+    'code' : IDL.Text,
+    'used' : IDL.Bool,
+  });
+  const ExternalBlob = IDL.Vec(IDL.Nat8);
+  const MediaType = IDL.Variant({ 'video' : IDL.Null, 'photo' : IDL.Null });
+  const MediaItem = IDL.Record({
     'owner' : IDL.Principal,
     'blob' : ExternalBlob,
     'timestamp' : Time,
     'caption' : IDL.Opt(IDL.Text),
+    'mediaType' : MediaType,
   });
   
   return IDL.Service({
@@ -112,11 +175,33 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
+    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'addFriend' : IDL.Func([IDL.Principal], [], []),
-    'getFriendPhotos' : IDL.Func([IDL.Principal], [IDL.Vec(Photo)], ['query']),
+    'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'deleteMedia' : IDL.Func([Time], [], []),
+    'generateInviteCode' : IDL.Func([], [IDL.Text], []),
+    'getAllRSVPs' : IDL.Func([], [IDL.Vec(RSVP)], ['query']),
+    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
+    'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getFriends' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
-    'getMyPhotos' : IDL.Func([], [IDL.Vec(Photo)], ['query']),
-    'uploadPhoto' : IDL.Func([ExternalBlob, IDL.Opt(IDL.Text)], [], []),
+    'getInviteCodes' : IDL.Func([], [IDL.Vec(InviteCode)], ['query']),
+    'getMyMedia' : IDL.Func([], [IDL.Vec(MediaItem)], ['query']),
+    'getUserMedia' : IDL.Func([IDL.Principal], [IDL.Vec(MediaItem)], ['query']),
+    'getUserProfile' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Opt(UserProfile)],
+        ['query'],
+      ),
+    'getUsername' : IDL.Func([IDL.Principal], [IDL.Opt(IDL.Text)], ['query']),
+    'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'setUsername' : IDL.Func([IDL.Text], [], []),
+    'submitRSVP' : IDL.Func([IDL.Text, IDL.Bool, IDL.Text], [], []),
+    'uploadMedia' : IDL.Func(
+        [ExternalBlob, IDL.Opt(IDL.Text), MediaType],
+        [],
+        [],
+      ),
   });
 };
 

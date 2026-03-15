@@ -1,22 +1,18 @@
 # Video Blog
 
 ## Current State
-The backend stores photos in a `Map<Principal, Photo>`, which maps each user to a single photo. Every new upload overwrites the previous one.
+Invite link generation exists on the Friends page but fails for regular users because the backend `generateInviteCode` function is restricted to admins only.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Nothing new UI-wise.
+- Nothing new
 
 ### Modify
-- Backend: Change photo storage from `Map<Principal, Photo>` (one per user) to `Map<Principal, [Photo]>` (list per user), so all uploaded photos are retained.
-- Backend: Update `uploadPhoto` to append to the user's list.
-- Backend: Update `getMyPhotos` and `getFriendPhotos` to return all photos for a user, sorted newest-first.
+- `generateInviteCode` backend function: change permission check from admin-only to any authenticated user
 
 ### Remove
-- Nothing.
+- Nothing
 
 ## Implementation Plan
-1. Replace `Map<Principal, Photo>` with a structure that holds multiple photos per user.
-2. `uploadPhoto`: push new photo onto the user's list.
-3. `getMyPhotos` / `getFriendPhotos`: return all photos for the given principal, sorted by descending timestamp.
+1. Update `generateInviteCode` in `main.mo` to allow any authenticated user (not just admins) to generate invite codes.

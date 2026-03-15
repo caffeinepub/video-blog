@@ -11,13 +11,31 @@ import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
 export type ExternalBlob = Uint8Array;
-export interface Photo {
+export interface InviteCode {
+  'created' : Time,
+  'code' : string,
+  'used' : boolean,
+}
+export interface MediaItem {
   'owner' : Principal,
   'blob' : ExternalBlob,
   'timestamp' : Time,
   'caption' : [] | [string],
+  'mediaType' : MediaType,
+}
+export type MediaType = { 'video' : null } |
+  { 'photo' : null };
+export interface RSVP {
+  'name' : string,
+  'inviteCode' : string,
+  'timestamp' : Time,
+  'attending' : boolean,
 }
 export type Time = bigint;
+export interface UserProfile { 'username' : [] | [string] }
+export type UserRole = { 'admin' : null } |
+  { 'user' : null } |
+  { 'guest' : null };
 export interface _CaffeineStorageCreateCertificateResult {
   'method' : string,
   'blob_hash' : string,
@@ -45,11 +63,28 @@ export interface _SERVICE {
     _CaffeineStorageRefillResult
   >,
   '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
+  '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addFriend' : ActorMethod<[Principal], undefined>,
-  'getFriendPhotos' : ActorMethod<[Principal], Array<Photo>>,
+  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'deleteMedia' : ActorMethod<[Time], undefined>,
+  'generateInviteCode' : ActorMethod<[], string>,
+  'getAllRSVPs' : ActorMethod<[], Array<RSVP>>,
+  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
+  'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getFriends' : ActorMethod<[], Array<Principal>>,
-  'getMyPhotos' : ActorMethod<[], Array<Photo>>,
-  'uploadPhoto' : ActorMethod<[ExternalBlob, [] | [string]], undefined>,
+  'getInviteCodes' : ActorMethod<[], Array<InviteCode>>,
+  'getMyMedia' : ActorMethod<[], Array<MediaItem>>,
+  'getUserMedia' : ActorMethod<[Principal], Array<MediaItem>>,
+  'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
+  'getUsername' : ActorMethod<[Principal], [] | [string]>,
+  'isCallerAdmin' : ActorMethod<[], boolean>,
+  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'setUsername' : ActorMethod<[string], undefined>,
+  'submitRSVP' : ActorMethod<[string, boolean, string], undefined>,
+  'uploadMedia' : ActorMethod<
+    [ExternalBlob, [] | [string], MediaType],
+    undefined
+  >,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

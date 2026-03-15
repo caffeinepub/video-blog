@@ -1,13 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Camera, Video } from "lucide-react";
 import { useState } from "react";
+import { MediaType } from "../backend";
 import CameraCapture from "../components/CameraCapture";
 import PhotoUploadForm from "../components/PhotoUploadForm";
+import VideoCapture from "../components/VideoCapture";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
+type Mode = "photo" | "video";
+
 export default function CapturePage() {
-  const [capturedPhoto, setCapturedPhoto] = useState<File | null>(null);
+  const [mode, setMode] = useState<Mode>("photo");
+  const [capturedMedia, setCapturedMedia] = useState<File | null>(null);
   const { identity, login, isLoggingIn } = useInternetIdentity();
   const navigate = useNavigate();
 
@@ -19,7 +24,7 @@ export default function CapturePage() {
         </h2>
         <div className="w-16 h-1 bg-primary mb-6" />
         <p className="text-muted-foreground mb-8 max-w-md font-medium">
-          You need to login to capture and share photos.
+          You need to login to capture and share media.
         </p>
         <Button
           size="lg"
@@ -34,17 +39,17 @@ export default function CapturePage() {
     );
   }
 
-  const handlePhotoCapture = (photo: File) => {
-    setCapturedPhoto(photo);
+  const handleMediaCapture = (media: File) => {
+    setCapturedMedia(media);
   };
 
   const handleUploadComplete = () => {
-    setCapturedPhoto(null);
+    setCapturedMedia(null);
     navigate({ to: "/" });
   };
 
   const handleCancel = () => {
-    setCapturedPhoto(null);
+    setCapturedMedia(null);
   };
 
   return (
@@ -61,19 +66,55 @@ export default function CapturePage() {
         </button>
         <div className="border-l-4 border-primary pl-4">
           <h2 className="text-3xl font-display font-black uppercase tracking-tight">
-            Capture Photo
+            Capture Media
           </h2>
           <p className="text-muted-foreground text-sm font-medium">
-            Take a photo to share with your friends
+            Take a photo or record a video to share with friends
           </p>
         </div>
       </div>
 
-      {!capturedPhoto ? (
-        <CameraCapture onPhotoCapture={handlePhotoCapture} />
+      {!capturedMedia && (
+        <div className="flex mb-6 border-2 border-foreground">
+          <button
+            type="button"
+            onClick={() => setMode("photo")}
+            data-ocid="capture.photo.tab"
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-black uppercase tracking-widest transition-colors ${
+              mode === "photo"
+                ? "bg-foreground text-background"
+                : "bg-background text-foreground hover:bg-muted"
+            }`}
+          >
+            <Camera className="w-4 h-4" />
+            Photo
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("video")}
+            data-ocid="capture.video.tab"
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-black uppercase tracking-widest transition-colors border-l-2 border-foreground ${
+              mode === "video"
+                ? "bg-foreground text-background"
+                : "bg-background text-foreground hover:bg-muted"
+            }`}
+          >
+            <Video className="w-4 h-4" />
+            Video
+          </button>
+        </div>
+      )}
+
+      {!capturedMedia ? (
+        mode === "photo" ? (
+          <CameraCapture onPhotoCapture={handleMediaCapture} />
+        ) : (
+          <VideoCapture onVideoCapture={handleMediaCapture} />
+        )
       ) : (
         <PhotoUploadForm
-          photo={capturedPhoto}
+          photo={capturedMedia}
+          mediaType={mode === "video" ? MediaType.video : MediaType.photo}
           onUploadComplete={handleUploadComplete}
           onCancel={handleCancel}
         />
