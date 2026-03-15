@@ -10,9 +10,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ImageOff, Loader2, Play, Trash2, User, VideoOff } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MediaItem } from "../backend";
 import { MediaType } from "../backend";
+
+const RETRY_DELAYS = [500, 1500, 3000];
+const MAX_RETRIES = 3;
 
 interface PhotoCardProps {
   photo: MediaItem;
@@ -35,7 +38,64 @@ export default function PhotoCard({
 
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [imgRetryCount, setImgRetryCount] = useState(0);
+  const [imgRetrying, setImgRetrying] = useState(false);
+  const [imgSrc, setImgSrc] = useState(mediaUrl);
+
   const [videoError, setVideoError] = useState(false);
+  const [videoRetryCount, setVideoRetryCount] = useState(0);
+  const [videoRetrying, setVideoRetrying] = useState(false);
+  const [videoSrc, setVideoSrc] = useState(mediaUrl);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+
+  // Thumbnail state: loading -> seeked (visible frame) -> playing
+  const [thumbState, setThumbState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const thumbVideoRef = useRef<HTMLVideoElement>(null);
+
+  const imgRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (imgRetryTimer.current) clearTimeout(imgRetryTimer.current);
+      if (videoRetryTimer.current) clearTimeout(videoRetryTimer.current);
+    };
+  }, []);
+
+  const handleImgError = () => {
+    if (imgRetryCount < MAX_RETRIES) {
+      setImgRetrying(true);
+      const delay = RETRY_DELAYS[imgRetryCount];
+      imgRetryTimer.current = setTimeout(() => {
+        const nextCount = imgRetryCount + 1;
+        setImgRetryCount(nextCount);
+        setImgSrc(`${mediaUrl}?retry=${nextCount}`);
+        setImgRetrying(false);
+      }, delay);
+    } else {
+      setImgError(true);
+      setImgRetrying(false);
+    }
+  };
+
+  const handleVideoError = () => {
+    if (videoRetryCount < MAX_RETRIES) {
+      setVideoRetrying(true);
+      const delay = RETRY_DELAYS[videoRetryCount];
+      videoRetryTimer.current = setTimeout(() => {
+        const nextCount = videoRetryCount + 1;
+        setVideoRetryCount(nextCount);
+        setVideoSrc(`${mediaUrl}?retry=${nextCount}`);
+        setVideoRetrying(false);
+      }, delay);
+    } else {
+      setVideoError(true);
+      setVideoRetrying(false);
+    }
+  };
 
   const formatDate = (date: Date) => {
     const now = new Date();
@@ -75,28 +135,108 @@ export default function PhotoCard({
     </div>
   );
 
+  const RetryingSpinner = () => (
+    <div
+      data-ocid="photo.loading_state"
+      className="absolute inset-0 flex items-center justify-center bg-muted"
+    >
+      <div className="flex flex-col items-center gap-2">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+          Retrying
+        </span>
+      </div>
+    </div>
+  );
+
+  const renderVideoContent = () => {
+    if (videoError) return <MediaUnavailable type="video" />;
+    if (videoRetrying) return <RetryingSpinner />;
+
+    if (videoPlaying) {
+      return (
+        // biome-ignore lint/a11y/useMediaCaption: user-generated content without captions
+        <video
+          key={videoSrc}
+          src={videoSrc}
+          className="w-full h-full object-cover"
+          controls
+          autoPlay
+          preload="auto"
+          playsInline
+          onError={handleVideoError}
+        />
+      );
+    }
+
+    // Thumbnail mode — use the video element itself as the thumbnail
+    return (
+      <>
+        {/* Loading spinner while seeking to first frame */}
+        {thumbState === "loading" && (
+          <div
+            data-ocid="photo.loading_state"
+            className="absolute inset-0 flex items-center justify-center bg-muted"
+          >
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {/* Video element used as thumbnail — no canvas, no CORS issue */}
+        {/* biome-ignore lint/a11y/useMediaCaption: thumbnail preview, not played */}
+        <video
+          ref={thumbVideoRef}
+          key={videoSrc}
+          src={videoSrc}
+          className="w-full h-full object-cover"
+          style={{
+            opacity: thumbState === "ready" ? 1 : 0,
+            transition: "opacity 0.2s",
+          }}
+          muted
+          playsInline
+          preload="metadata"
+          onLoadedMetadata={() => {
+            const v = thumbVideoRef.current;
+            if (v) {
+              v.currentTime = v.duration > 1 ? 1 : 0.5;
+            }
+          }}
+          onSeeked={() => setThumbState("ready")}
+          onError={() => setThumbState("error")}
+        />
+
+        {/* Error/fallback placeholder */}
+        {thumbState === "error" && (
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-muted to-muted-foreground/20" />
+        )}
+
+        {/* Play button overlay */}
+        <button
+          type="button"
+          data-ocid="photo.primary_button"
+          aria-label="Play video"
+          onClick={() => setVideoPlaying(true)}
+          className="absolute inset-0 flex items-center justify-center group"
+        >
+          <div className="w-16 h-16 bg-foreground border-4 border-foreground flex items-center justify-center transition-transform group-hover:scale-110">
+            <Play className="w-7 h-7 fill-background text-background ml-1" />
+          </div>
+        </button>
+      </>
+    );
+  };
+
   return (
     <div className="border-2 border-foreground bg-card overflow-hidden">
       <div className="relative w-full aspect-square bg-muted">
         {isVideo ? (
-          videoError ? (
-            <MediaUnavailable type="video" />
-          ) : (
-            // biome-ignore lint/a11y/useMediaCaption: user-generated content without captions
-            <video
-              src={mediaUrl}
-              className="w-full h-full object-cover"
-              controls
-              preload="metadata"
-              playsInline
-              onError={() => setVideoError(true)}
-            />
-          )
+          renderVideoContent()
         ) : imgError ? (
           <MediaUnavailable type="image" />
         ) : (
           <>
-            {!imgLoaded && (
+            {(!imgLoaded || imgRetrying) && (
               <div
                 data-ocid="photo.loading_state"
                 className="absolute inset-0 flex items-center justify-center bg-muted"
@@ -104,23 +244,28 @@ export default function PhotoCard({
                 <div className="flex flex-col items-center gap-2">
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                   <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                    Loading
+                    {imgRetrying ? "Retrying" : "Loading"}
                   </span>
                 </div>
               </div>
             )}
-            <img
-              src={mediaUrl}
-              alt={photo.caption || "Photo"}
-              className={`w-full h-full object-cover transition-opacity duration-200 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
-              loading="lazy"
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgError(true)}
-            />
+            {!imgRetrying && (
+              <img
+                key={imgSrc}
+                src={imgSrc}
+                alt={photo.caption || "Photo"}
+                className={`w-full h-full object-cover transition-opacity duration-200 ${
+                  imgLoaded ? "opacity-100" : "opacity-0"
+                }`}
+                loading="lazy"
+                onLoad={() => setImgLoaded(true)}
+                onError={handleImgError}
+              />
+            )}
           </>
         )}
-        {isVideo && !videoError && (
-          <div className="absolute top-2 left-2 bg-foreground text-background px-2 py-0.5 text-xs font-bold uppercase tracking-widest flex items-center gap-1">
+        {isVideo && !videoError && !videoRetrying && !videoPlaying && (
+          <div className="absolute top-2 left-2 bg-foreground text-background px-2 py-0.5 text-xs font-bold uppercase tracking-widest flex items-center gap-1 pointer-events-none z-10">
             <Play className="w-3 h-3 fill-background" />
             VIDEO
           </div>
@@ -132,7 +277,7 @@ export default function PhotoCard({
                 type="button"
                 data-ocid="photo.delete_button"
                 disabled={isDeleting}
-                className="absolute top-2 right-2 w-8 h-8 bg-destructive border-2 border-foreground flex items-center justify-center hover:bg-destructive/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="absolute top-2 right-2 w-8 h-8 bg-destructive border-2 border-foreground flex items-center justify-center hover:bg-destructive/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
                 aria-label="Delete media"
               >
                 {isDeleting ? (

@@ -1,7 +1,6 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { useQueryClient } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Camera, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
@@ -11,6 +10,11 @@ import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useGetFriends, useGetMyMedia } from "../hooks/useQueries";
 import PhotoCard from "./PhotoCard";
+
+const retryConfig = {
+  retry: 3,
+  retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
+};
 
 export default function PhotoFeed() {
   const myMediaQuery = useGetMyMedia();
@@ -24,35 +28,36 @@ export default function PhotoFeed() {
   );
 
   const myPrincipal = identity?.getPrincipal().toString();
+  const friends = friendsQuery.data ?? [];
 
-  // Fetch all friend media in a single query
-  const friendMediaQuery = useQuery<MediaItem[]>({
-    queryKey: [
-      "allFriendMedia",
-      friendsQuery.data?.map((f) => f.toString()).join(","),
-    ],
-    queryFn: async () => {
-      if (!actor || !friendsQuery.data || friendsQuery.data.length === 0)
-        return [];
-
-      const mediaPromises = friendsQuery.data.map((friend) =>
-        actor.getUserMedia(friend),
-      );
-      const mediaArrays = await Promise.all(mediaPromises);
-      return mediaArrays.flat();
-    },
-    enabled:
-      !!actor &&
-      !actorFetching &&
-      !!friendsQuery.data &&
-      friendsQuery.data.length > 0,
+  // One query per friend — fires independently, results stream in as they resolve
+  const friendMediaQueries = useQueries({
+    queries: friends.map((friend) => ({
+      queryKey: ["friendMedia", friend.toString()],
+      queryFn: async () => {
+        if (!actor) return [] as MediaItem[];
+        return actor.getUserMedia(friend);
+      },
+      enabled: !!actor && !actorFetching && !!friendsQuery.data,
+      ...retryConfig,
+    })),
   });
 
-  // Fetch usernames for all unique owners
+  // Merge own media with whichever friend queries have already resolved
   const allMedia: MediaItem[] = [
-    ...(myMediaQuery.data || []),
-    ...(friendMediaQuery.data || []),
+    ...(myMediaQuery.data ?? []),
+    ...friendMediaQueries.flatMap((q) => q.data ?? []),
   ];
+
+  // Keys of friends whose queries are still in-flight (no data yet)
+  const pendingFriendKeys = friends
+    .filter((_, i) => {
+      const q = friendMediaQueries[i];
+      return q && (q.isLoading || q.isFetching) && !q.data;
+    })
+    .map((f) => f.toString());
+
+  // Unique owners across already-available media
   const uniqueOwners = Array.from(
     new Set(allMedia.map((m) => m.owner.toString())),
   );
@@ -78,6 +83,7 @@ export default function PhotoFeed() {
     },
     enabled: !!actor && !actorFetching && uniqueOwners.length > 0,
     staleTime: 30_000,
+    ...retryConfig,
   });
 
   const handleDelete = async (timestamp: bigint) => {
@@ -86,7 +92,13 @@ export default function PhotoFeed() {
     try {
       await actor.deleteMedia(timestamp);
       await queryClient.invalidateQueries({ queryKey: ["myMedia"] });
-      await queryClient.invalidateQueries({ queryKey: ["allFriendMedia"] });
+      await Promise.all(
+        friends.map((f) =>
+          queryClient.invalidateQueries({
+            queryKey: ["friendMedia", f.toString()],
+          }),
+        ),
+      );
       toast.success("Deleted successfully");
     } catch (err) {
       console.error(err);
@@ -98,18 +110,12 @@ export default function PhotoFeed() {
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["myMedia"] });
-    queryClient.invalidateQueries({ queryKey: ["allFriendMedia"] });
+    queryClient.invalidateQueries({ queryKey: ["friendMedia"] });
     queryClient.invalidateQueries({ queryKey: ["friends"] });
   };
 
-  const isLoading =
-    myMediaQuery.isLoading ||
-    friendsQuery.isLoading ||
-    (friendsQuery.data &&
-      friendsQuery.data.length > 0 &&
-      friendMediaQuery.isLoading);
-
-  if (isLoading) {
+  // Top-level spinner only while own media is loading
+  if (myMediaQuery.isLoading) {
     return (
       <div
         className="flex items-center justify-center py-12"
@@ -152,10 +158,11 @@ export default function PhotoFeed() {
     );
   }
 
-  if (friendsQuery.isError || friendMediaQuery.isError) {
-    // Non-critical error — still show own media but surface a warning
-    return (
-      <div className="space-y-4">
+  const hasFriendError = friendMediaQueries.some((q) => q.isError);
+
+  return (
+    <div className="space-y-4">
+      {(friendsQuery.isError || hasFriendError) && (
         <Alert
           variant="destructive"
           data-ocid="feed.error_state"
@@ -174,32 +181,23 @@ export default function PhotoFeed() {
             </button>
           </AlertDescription>
         </Alert>
-        <FeedGrid
-          media={allMedia}
-          myPrincipal={myPrincipal}
-          usernamesQuery={usernamesQuery}
-          deletingTimestamp={deletingTimestamp}
-          onDelete={handleDelete}
-          onNavigate={navigate}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <FeedGrid
-      media={allMedia}
-      myPrincipal={myPrincipal}
-      usernamesQuery={usernamesQuery}
-      deletingTimestamp={deletingTimestamp}
-      onDelete={handleDelete}
-      onNavigate={navigate}
-    />
+      )}
+      <FeedGrid
+        media={allMedia}
+        pendingFriendKeys={pendingFriendKeys}
+        myPrincipal={myPrincipal}
+        usernamesQuery={usernamesQuery}
+        deletingTimestamp={deletingTimestamp}
+        onDelete={handleDelete}
+        onNavigate={navigate}
+      />
+    </div>
   );
 }
 
 function FeedGrid({
   media,
+  pendingFriendKeys,
   myPrincipal,
   usernamesQuery,
   deletingTimestamp,
@@ -207,6 +205,7 @@ function FeedGrid({
   onNavigate,
 }: {
   media: MediaItem[];
+  pendingFriendKeys: string[];
   myPrincipal: string | undefined;
   usernamesQuery: { data?: Record<string, string | null> };
   deletingTimestamp: bigint | null;
@@ -217,7 +216,7 @@ function FeedGrid({
     (a, b) => Number(b.timestamp) - Number(a.timestamp),
   );
 
-  if (sortedMedia.length === 0) {
+  if (sortedMedia.length === 0 && pendingFriendKeys.length === 0) {
     return (
       <div
         data-ocid="feed.empty_state"
@@ -274,6 +273,20 @@ function FeedGrid({
           </div>
         );
       })}
+      {/* Skeleton placeholders for friend queries still in-flight */}
+      {pendingFriendKeys.map((friendKey) => (
+        <div
+          key={`skeleton-${friendKey}`}
+          className="border-2 border-foreground bg-muted"
+          data-ocid="feed.loading_state"
+        >
+          <div className="aspect-square animate-pulse bg-muted-foreground/20" />
+          <div className="p-3 space-y-2">
+            <div className="h-3 w-2/3 animate-pulse bg-muted-foreground/20" />
+            <div className="h-2 w-1/3 animate-pulse bg-muted-foreground/10" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

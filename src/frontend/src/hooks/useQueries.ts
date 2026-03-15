@@ -5,6 +5,11 @@ import { MediaType, UserRole } from "../backend";
 import { useActor } from "./useActor";
 import { useInternetIdentity } from "./useInternetIdentity";
 
+const retryConfig = {
+  retry: 3,
+  retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
+};
+
 export function useGetMyMedia() {
   const { actor, isFetching } = useActor();
 
@@ -15,6 +20,7 @@ export function useGetMyMedia() {
       return actor.getMyMedia();
     },
     enabled: !!actor && !isFetching,
+    ...retryConfig,
   });
 }
 
@@ -31,6 +37,7 @@ export function useGetFriends() {
       return actor.getFriends();
     },
     enabled: !!actor && !isFetching,
+    ...retryConfig,
   });
 }
 
