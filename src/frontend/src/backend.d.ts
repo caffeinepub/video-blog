@@ -60,6 +60,7 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsername(user: Principal): Promise<string | null>;
     isCallerAdmin(): Promise<boolean>;
+    registerWithInviteCode(inviteCode: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setUsername(username: string): Promise<void>;
     submitRSVP(name: string, attending: boolean, inviteCode: string): Promise<void>;

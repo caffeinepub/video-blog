@@ -10,7 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Camera, Home, Loader2, Pencil, Users } from "lucide-react";
+import { Camera, Copy, Home, Loader2, Pencil, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -46,6 +46,16 @@ export default function Navigation() {
       setUsernameDialogOpen(false);
     } catch {
       toast.error("Failed to update username");
+    }
+  };
+
+  const handleCopyPrincipal = async () => {
+    if (!principalStr) return;
+    try {
+      await navigator.clipboard.writeText(principalStr);
+      toast.success("Principal ID copied!");
+    } catch {
+      toast.error("Failed to copy principal ID");
     }
   };
 
@@ -133,28 +143,52 @@ export default function Navigation() {
                 >
                   <DialogHeader>
                     <DialogTitle className="font-black uppercase tracking-widest">
-                      Change Username
+                      Settings
                     </DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-3 py-2">
-                    <Label
-                      htmlFor="username-input"
-                      className="font-bold uppercase tracking-wide text-xs"
-                    >
-                      Username
-                    </Label>
-                    <Input
-                      id="username-input"
-                      data-ocid="nav.username.input"
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && handleSaveUsername()
-                      }
-                      placeholder="Enter your username..."
-                      className="border-2 border-foreground rounded-none"
-                      disabled={setUsernameMutation.isPending}
-                    />
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="username-input"
+                        className="font-bold uppercase tracking-wide text-xs"
+                      >
+                        Username
+                      </Label>
+                      <Input
+                        id="username-input"
+                        data-ocid="nav.username.input"
+                        value={usernameInput}
+                        onChange={(e) => setUsernameInput(e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && handleSaveUsername()
+                        }
+                        placeholder="Enter your username..."
+                        className="border-2 border-foreground rounded-none"
+                        disabled={setUsernameMutation.isPending}
+                      />
+                    </div>
+
+                    {principalStr && (
+                      <div className="space-y-1.5">
+                        <Label className="font-bold uppercase tracking-wide text-xs">
+                          Principal ID
+                        </Label>
+                        <div className="flex items-stretch gap-0 border-2 border-foreground">
+                          <code className="flex-1 px-3 py-2 font-mono text-xs leading-relaxed break-all bg-muted text-foreground select-all">
+                            {principalStr}
+                          </code>
+                          <button
+                            type="button"
+                            data-ocid="nav.principal.button"
+                            onClick={handleCopyPrincipal}
+                            title="Copy principal ID"
+                            className="px-3 border-l-2 border-foreground bg-background hover:bg-foreground hover:text-background transition-colors flex items-center justify-center shrink-0"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <DialogFooter className="gap-2">
                     <Button

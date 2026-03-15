@@ -1,8 +1,9 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ExternalBlob, MediaItem } from "../backend";
-import { MediaType } from "../backend";
+import { MediaType, UserRole } from "../backend";
 import { useActor } from "./useActor";
+import { useInternetIdentity } from "./useInternetIdentity";
 
 export function useGetMyMedia() {
   const { actor, isFetching } = useActor();
@@ -128,6 +129,36 @@ export function useSubmitRSVP() {
     }: { name: string; attending: boolean; inviteCode: string }) => {
       if (!actor) throw new Error("Actor not initialized");
       await actor.submitRSVP(name, attending, inviteCode);
+    },
+  });
+}
+
+export function useCallerUserRole() {
+  const { actor, isFetching } = useActor();
+  const { identity } = useInternetIdentity();
+
+  return useQuery<UserRole>({
+    queryKey: ["callerUserRole"],
+    queryFn: async () => {
+      if (!actor) return UserRole.guest;
+      return actor.getCallerUserRole();
+    },
+    enabled: !!actor && !isFetching && !!identity,
+    staleTime: 30_000,
+  });
+}
+
+export function useRegisterWithInviteCode() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (inviteCode: string) => {
+      if (!actor) throw new Error("Actor not initialized");
+      await (actor as any).registerWithInviteCode(inviteCode);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["callerUserRole"] });
     },
   });
 }

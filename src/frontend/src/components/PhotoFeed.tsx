@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Camera, Loader2 } from "lucide-react";
+import { AlertTriangle, Camera, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { MediaItem } from "../backend";
@@ -96,14 +96,18 @@ export default function PhotoFeed() {
     }
   };
 
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["myMedia"] });
+    queryClient.invalidateQueries({ queryKey: ["allFriendMedia"] });
+    queryClient.invalidateQueries({ queryKey: ["friends"] });
+  };
+
   const isLoading =
     myMediaQuery.isLoading ||
     friendsQuery.isLoading ||
     (friendsQuery.data &&
       friendsQuery.data.length > 0 &&
       friendMediaQuery.isLoading);
-  const hasError =
-    myMediaQuery.isError || friendsQuery.isError || friendMediaQuery.isError;
 
   if (isLoading) {
     return (
@@ -116,19 +120,102 @@ export default function PhotoFeed() {
     );
   }
 
-  if (hasError) {
+  if (myMediaQuery.isError) {
     return (
-      <Alert variant="destructive" data-ocid="feed.error_state">
-        <AlertDescription>
-          Failed to load media. Please try again later.
-        </AlertDescription>
-      </Alert>
+      <div
+        data-ocid="feed.error_state"
+        className="border-2 border-destructive bg-destructive/10 p-6"
+      >
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 bg-destructive flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="font-black uppercase tracking-widest text-sm text-foreground mb-1">
+              Feed Unavailable
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Could not load your media. This may be a permissions or
+              connectivity issue. Try refreshing the page.
+            </p>
+            <Button
+              onClick={handleRefresh}
+              data-ocid="feed.secondary_button"
+              className="gap-2 rounded-none border-2 border-foreground bg-foreground text-background font-bold uppercase tracking-wide text-xs hover:bg-foreground/80"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  const sortedMedia = allMedia.sort((a, b) => {
-    return Number(b.timestamp) - Number(a.timestamp);
-  });
+  if (friendsQuery.isError || friendMediaQuery.isError) {
+    // Non-critical error — still show own media but surface a warning
+    return (
+      <div className="space-y-4">
+        <Alert
+          variant="destructive"
+          data-ocid="feed.error_state"
+          className="rounded-none border-2 border-destructive"
+        >
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="font-bold uppercase tracking-wide text-xs">
+            Some content could not load. Try refreshing if items are missing.{" "}
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="underline cursor-pointer"
+              data-ocid="feed.secondary_button"
+            >
+              Refresh
+            </button>
+          </AlertDescription>
+        </Alert>
+        <FeedGrid
+          media={allMedia}
+          myPrincipal={myPrincipal}
+          usernamesQuery={usernamesQuery}
+          deletingTimestamp={deletingTimestamp}
+          onDelete={handleDelete}
+          onNavigate={navigate}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <FeedGrid
+      media={allMedia}
+      myPrincipal={myPrincipal}
+      usernamesQuery={usernamesQuery}
+      deletingTimestamp={deletingTimestamp}
+      onDelete={handleDelete}
+      onNavigate={navigate}
+    />
+  );
+}
+
+function FeedGrid({
+  media,
+  myPrincipal,
+  usernamesQuery,
+  deletingTimestamp,
+  onDelete,
+  onNavigate,
+}: {
+  media: MediaItem[];
+  myPrincipal: string | undefined;
+  usernamesQuery: { data?: Record<string, string | null> };
+  deletingTimestamp: bigint | null;
+  onDelete: (ts: bigint) => Promise<void>;
+  onNavigate: (args: { to: string }) => void;
+}) {
+  const sortedMedia = [...media].sort(
+    (a, b) => Number(b.timestamp) - Number(a.timestamp),
+  );
 
   if (sortedMedia.length === 0) {
     return (
@@ -148,7 +235,7 @@ export default function PhotoFeed() {
         </p>
         <div className="flex gap-2">
           <Button
-            onClick={() => navigate({ to: "/capture" })}
+            onClick={() => onNavigate({ to: "/capture" })}
             data-ocid="feed.primary_button"
             className="gap-2 border-2 border-foreground font-bold uppercase tracking-wide bg-primary text-primary-foreground hover:bg-foreground hover:border-foreground"
           >
@@ -157,7 +244,7 @@ export default function PhotoFeed() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => navigate({ to: "/friends" })}
+            onClick={() => onNavigate({ to: "/friends" })}
             data-ocid="feed.secondary_button"
             className="border-2 border-foreground font-bold uppercase tracking-wide hover:bg-foreground hover:text-background"
           >
@@ -180,9 +267,7 @@ export default function PhotoFeed() {
           >
             <PhotoCard
               photo={item}
-              onDelete={
-                isOwnMedia ? () => handleDelete(item.timestamp) : undefined
-              }
+              onDelete={isOwnMedia ? () => onDelete(item.timestamp) : undefined}
               isDeleting={deletingTimestamp === item.timestamp}
               username={username}
             />

@@ -9,7 +9,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Play, Trash2, User } from "lucide-react";
+import { ImageOff, Loader2, Play, Trash2, User, VideoOff } from "lucide-react";
+import { useState } from "react";
 import type { MediaItem } from "../backend";
 import { MediaType } from "../backend";
 
@@ -32,6 +33,10 @@ export default function PhotoCard({
   const ownerShort = `${ownerPrincipal.slice(0, 5)}...${ownerPrincipal.slice(-3)}`;
   const isVideo = photo.mediaType === MediaType.video;
 
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
   const formatDate = (date: Date) => {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -51,27 +56,70 @@ export default function PhotoCard({
     });
   };
 
+  const MediaUnavailable = ({ type }: { type: "image" | "video" }) => (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-muted border-2 border-foreground">
+      {type === "video" ? (
+        <VideoOff
+          className="w-10 h-10 text-muted-foreground"
+          strokeWidth={1.5}
+        />
+      ) : (
+        <ImageOff
+          className="w-10 h-10 text-muted-foreground"
+          strokeWidth={1.5}
+        />
+      )}
+      <span className="text-xs font-black uppercase tracking-widest text-muted-foreground border-t-2 border-muted-foreground/30 pt-2">
+        Media Unavailable
+      </span>
+    </div>
+  );
+
   return (
     <div className="border-2 border-foreground bg-card overflow-hidden">
       <div className="relative w-full aspect-square bg-muted">
         {isVideo ? (
-          // biome-ignore lint/a11y/useMediaCaption: user-generated content without captions
-          <video
-            src={mediaUrl}
-            className="w-full h-full object-cover"
-            controls
-            preload="metadata"
-            playsInline
-          />
+          videoError ? (
+            <MediaUnavailable type="video" />
+          ) : (
+            // biome-ignore lint/a11y/useMediaCaption: user-generated content without captions
+            <video
+              src={mediaUrl}
+              className="w-full h-full object-cover"
+              controls
+              preload="metadata"
+              playsInline
+              onError={() => setVideoError(true)}
+            />
+          )
+        ) : imgError ? (
+          <MediaUnavailable type="image" />
         ) : (
-          <img
-            src={mediaUrl}
-            alt={photo.caption || "Photo"}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
+          <>
+            {!imgLoaded && (
+              <div
+                data-ocid="photo.loading_state"
+                className="absolute inset-0 flex items-center justify-center bg-muted"
+              >
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    Loading
+                  </span>
+                </div>
+              </div>
+            )}
+            <img
+              src={mediaUrl}
+              alt={photo.caption || "Photo"}
+              className={`w-full h-full object-cover transition-opacity duration-200 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+              loading="lazy"
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+            />
+          </>
         )}
-        {isVideo && (
+        {isVideo && !videoError && (
           <div className="absolute top-2 left-2 bg-foreground text-background px-2 py-0.5 text-xs font-bold uppercase tracking-widest flex items-center gap-1">
             <Play className="w-3 h-3 fill-background" />
             VIDEO
